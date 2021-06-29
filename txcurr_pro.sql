@@ -346,13 +346,6 @@ select
 	fin.all_visits end " Appointments done",
 	case when fin.all_recorded_visits is null then 0 else
 	fin.missed_appointments end as " Missed / overdue appointments",
-	fin.overdue_less_than_14_days,
-	fin.overdue_14_days,
-	fin.overdue_15_to_27_days,
-	fin.overdue_28_days,
-	fin.overdue_29_to_59_days,
-	fin.overdue_60_days,
-	fin.overdue_Over_60_days,
 	fin.visits_with_no_appt_in_Q
 from
 	(
