@@ -6,7 +6,7 @@ select
 	loc.prime_partner,
 	date(a.appointment_date) appointment_date,
 	e.person_id,
-	date(e.visit_date) visit_date
+	max(date(e.visit_date)) visit_date
 from
 	encounters e
 left join appointments a on
@@ -32,10 +32,19 @@ where
 	and loc.facility_name in (select site_name from ids.succesful_con_sites)
 	and date(appointment_date) between (
 	SELECT
-		CAST(date_trunc('quarter', current_date) as date)) and (select date(CAST(( current_date) as date)::date - cast('1 days' as interval))) ;
+		CAST(date_trunc('quarter', current_date) as date)) and (select date(CAST(( current_date) as date)::date - cast('1 days' as interval))) 
+  group by 
+  loc.district,
+	cast(loc.facility_name as CHAR(255)),
+	loc.prime_partner,
+	date(a.appointment_date),
+	e.person_id;
+
+
+
+
 
 drop table if exists tx_visits;
-
 create table tx_visits as
 select
 	DISTINCT loc.district,
@@ -232,28 +241,33 @@ where
 	SELECT
 		CAST(date_trunc('quarter', current_date) as date));
 
+
+
+
+
 drop table if exists tx_missed_appointments;
 create table tx_missed_appointments as
-select
-	ma.recent_appointment,
-	ma.district,
-	ma.facility_name,
-	ma.prime_partner,
-	count(ma.facility_name) missed_appointments
-from
-	(
-	select
-		district,
+select distinct 
+ma.recent_appointment recent_appointment,
+ma.district,
+ma.facility_name,
+ma.prime_partner,
+count(ma.facility_name) missed_appointments
+from	
+        (
+        select distinct
+        district,
 		facility_name,
 		prime_partner ,
 		person_id,
-		min(appointment_date) recent_appointment
+		min(appointment_date) recent_appointment,
+	    max(visit_date) visit_date
 	from
-		tx_appointments
+		tx_appointments txa
 	where
-		person_id not in (
+		txa.person_id not in (
 		select
-			person_id
+			distinct person_id
 		from
 			tx_visits
 			)
@@ -261,32 +275,44 @@ from
 		district,
 		facility_name,
 		prime_partner,
-		person_id ) ma
-group by
-	ma.recent_appointment,
-	ma.district,
-	ma.facility_name,
-	ma.prime_partner;
+		person_id) ma
+	group by 
+ma.recent_appointment,
+ma.district,
+ma.facility_name,
+ma.prime_partner;
+
+
+
 
 drop table if exists tx_overdue_appointments;
 create table tx_overdue_appointments as
 select distinct
 (select date(CAST(( current_date) as date)::date - cast('1 days' as interval))) as Report_date,
-dii.identifier De_identified_identifier,
-DATE_PART('day', now() - ma.recent_appointment) Number_of_days_Overdue,
-ma.facility_name Facility_name,
-ma.district District,
-ma.prime_partner Partner,
-ma.visit_date last_visit_date
+    dii.identifier De_identified_identifier,
+     DATE_PART('day', (select TIMESTAMP 'yesterday') - ma.recent_appointment) Number_of_days_Overdue,
+     CASE WHEN DATE_PART('day', (select TIMESTAMP 'yesterday') - ma.recent_appointment) < 14 THEN 'overdue_less_than_14_days'
+     WHEN DATE_PART('day', (select TIMESTAMP 'yesterday') - ma.recent_appointment) = 14 THEN 'overdue_14_days'
+     WHEN DATE_PART('day', (select TIMESTAMP 'yesterday') - ma.recent_appointment) >14 AND DATE_PART('day', now() - ma.recent_appointment) <28 THEN 'overdue_15_to_27_days'
+     WHEN DATE_PART('day', (select TIMESTAMP 'yesterday') - ma.recent_appointment) = 28 THEN 'overdue_28_days'
+     WHEN DATE_PART('day', (select TIMESTAMP 'yesterday') - ma.recent_appointment) >28 AND DATE_PART('day', now() - ma.recent_appointment)<60 THEN 'overdue_29_to_59_days'
+     WHEN DATE_PART('day', (select TIMESTAMP 'yesterday') - ma.recent_appointment) =60 THEN 'overdue_60_days'
+     WHEN DATE_PART('day', (select TIMESTAMP 'yesterday') - ma.recent_appointment) > 60 THEN 'overdue_Over_60_days'
+     ELSE '' 
+     END Overdue_kpi,
+     ma.facility_name Facility_name,
+     ma.district District,
+     ma.prime_partner Partner,
+     ma.recent_appointment date_appointment_missed
 from	
         (
         select distinct
-                district,
+        district,
 		facility_name,
 		prime_partner ,
 		person_id,
 		min(appointment_date) recent_appointment,
-	        max(visit_date) visit_date
+	    max(visit_date) visit_date
 	from
 		tx_appointments txa
 	where
@@ -301,6 +327,5 @@ from
 		facility_name,
 		prime_partner,
 		person_id) ma join de_identified_identifiers dii on ma.person_id = dii.person_id 
-		where dii.voided ='0'
-;
+		where dii.voided ='0';
 
