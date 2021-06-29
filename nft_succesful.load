@@ -1,0 +1,8 @@
+LOAD DATABASE
+     FROM      mysql://effort:passpass@10.44.0.43:3306/ids
+     INTO postgresql://postgres:postgres@localhost:5432/ids
+
+  WITH include drop, create tables, create indexes, reset sequences, no foreign keys, disable triggers, uniquify index names, quote identifiers
+
+including only table names matching 'succesful_con_sites'
+;
