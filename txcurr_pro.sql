@@ -485,3 +485,172 @@ from
 order by
 	fin.facility_name,
 	fin.appointment_date ;
+
+
+
+
+
+drop table if exists tx_raw_aggregate_2;
+create table tx_raw_aggregate_2 as
+select
+	ma1.date_of_incident,
+	ma1.district,
+	ma1.facility_name,
+	ma1.prime_partner,
+	count(ma1.facility_name) filter (
+	where ma1.classification = 'incomplete visit') as incomplete_visits,
+	count(ma1.facility_name) filter (
+	where ma1.classification = 'transferred out') as transferred_out,
+	count(ma1.facility_name) filter (
+	where ma1.classification = 'patient died') as deceased,
+	((select tma.missed_appointments from tx_missed_appointments tma  where tma.recent_appointment = ma1.date_of_incident and tma.district =ma1.district and tma.facility_name =ma1.facility_name and tma.prime_partner = ma1.prime_partner)-
+	((case when 
+    (count(ma1.facility_name) filter (	where ma1.classification = 'incomplete visit')) is null then 0 else (count(ma1.facility_name) filter (	where ma1.classification = 'incomplete visit')) end)  + 
+    (case when 
+    (count(ma1.facility_name) filter (where ma1.classification = 'transferred out')) is null then 0 else (count(ma1.facility_name) filter (where ma1.classification = 'transferred out')) end) +
+    (case when 
+    (count(ma1.facility_name) filter (where ma1.classification = 'patient died')) is null then 0 else (count(ma1.facility_name) filter (where ma1.classification = 'patient died'))end) ))
+     as missed_for_unknown_reason
+from
+	(
+	select
+		ma.district,
+		ma.facility_name,
+		ma.prime_partner,
+		ma.person_id,
+		ma.missed_appointment_date,
+		date(enc.visit_date) date_of_incident,
+		'incomplete visit' as classification
+	from
+		(
+		select
+			ta.district,
+			ta.facility_name,
+			ta.prime_partner ,
+			ta.person_id,
+			min(ta.appointment_date) missed_appointment_date
+		from
+			tx_appointments ta
+		where
+			ta.person_id not in (
+			select
+				person_id
+			from
+				tx_visits)
+		group by
+			ta.district,
+			ta.facility_name,
+			ta.prime_partner,
+			ta.person_id) ma
+	join encounters enc on
+		(enc.person_id = ma.person_id
+			and date(enc.visit_date)>ma.missed_appointment_date)
+	where
+		enc.voided = '0'
+		and enc.encounter_type_id = '78'
+union all
+	select
+		ma.district,
+		ma.facility_name,
+		ma.prime_partner,
+		ma.person_id,
+		ma.missed_appointment_date,
+		date(enc.visit_date) date_of_incident,
+		'transferred out' as classification
+	from
+		(
+		select
+			ta.district,
+			ta.facility_name,
+			ta.prime_partner ,
+			ta.person_id,
+			min(ta.appointment_date) missed_appointment_date
+		from
+			tx_appointments ta
+		where
+			ta.person_id not in (
+			select
+				person_id
+			from
+				tx_visits)
+		group by
+			ta.district,
+			ta.facility_name,
+			ta.prime_partner,
+			ta.person_id) ma
+	join encounters enc on
+		(enc.person_id = ma.person_id
+			and date(enc.visit_date)>ma.missed_appointment_date)
+	where
+		enc.voided = '0'
+		and enc.encounter_type_id in ('138', '92' )
+union all
+	select
+		ma.district,
+		ma.facility_name,
+		ma.prime_partner,
+		ma.person_id,
+		ma.missed_appointment_date,
+		date(otc.start_date) date_of_incident,
+		'patient died' as classification
+	from
+		(
+		select
+			ta.district,
+			ta.facility_name,
+			ta.prime_partner ,
+			ta.person_id,
+			min(ta.appointment_date) missed_appointment_date
+		from
+			tx_appointments ta
+		where
+			ta.person_id not in (
+			select
+				person_id
+			from
+				tx_visits)
+		group by
+			ta.district,
+			ta.facility_name,
+			ta.prime_partner,
+			ta.person_id) ma
+	join outcomes otc on
+		(otc.person_id = ma.person_id
+			and date(otc.start_date)<ma.missed_appointment_date)
+	where
+		otc.voided = '0'
+		and otc.concept_id in ('3348', '3349' )
+			and otc.start_date>(
+			select
+				date((
+				select
+					cast(date_trunc('quarter', current_date) as date))::date - cast('365 days' as interval)))) ma1
+group by
+	ma1.date_of_incident,
+	ma1.district,
+	ma1.facility_name,
+	ma1.prime_partner ;
+
+
+
+
+
+drop table if exists tx_raw_aggregate_3;
+create table tx_raw_aggregate_3 as
+select report_date,	district,facility_name,partner prime_partner,
+count(facility_name) filter (
+	where overdue_kpi = 'overdue_14_days') as overdue_14_days,
+count(facility_name) filter (
+	where overdue_kpi = 'overdue_less_than_14_days') as overdue_less_than_14_days,
+	count(facility_name) filter (
+	where overdue_kpi = 'overdue_15_to_27_days') as overdue_15_to_27_days,
+	count(facility_name) filter (
+	where overdue_kpi = 'overdue_28_days') as overdue_28_days,
+	count(facility_name) filter (
+	where overdue_kpi = 'overdue_29_to_59_days') as overdue_29_to_59_days,
+	count(facility_name) filter (
+	where overdue_kpi = 'overdue_60_days') as overdue_60_days,
+	count(facility_name) filter (
+	where overdue_kpi = 'overdue_Over_60_days') as overdue_Over_60_days
+from  tx_overdue_appointments_all_report_dates
+group by report_date,	district,facility_name,partner; 
