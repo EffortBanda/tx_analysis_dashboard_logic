@@ -1,3 +1,4 @@
+delete from tx_overdue_appointments_all_report_dates toaard where toaard.facility_name not in (select site_name from ids.succesful_con_sites); 
 drop table tx_appointments ;
 create table tx_appointments as
 select
@@ -329,3 +330,158 @@ from
 		person_id) ma join de_identified_identifiers dii on ma.person_id = dii.person_id 
 		where dii.voided ='0';
 
+
+
+
+drop table if exists tx_raw_aggregate_1;
+
+create table tx_raw_aggregate_1 as
+select
+	fin.appointment_date,
+	fin.district,
+	fin.facility_name,
+	fin.prime_partner,
+	fin.all_appointments as " Appointments due",
+	case when fin.all_recorded_visits is null then 0 else
+	fin.all_visits end " Appointments done",
+	case when fin.all_recorded_visits is null then 0 else
+	fin.missed_appointments end as " Missed / overdue appointments",
+	fin.overdue_less_than_14_days,
+	fin.overdue_14_days,
+	fin.overdue_15_to_27_days,
+	fin.overdue_28_days,
+	fin.overdue_29_to_59_days,
+	fin.overdue_60_days,
+	fin.overdue_Over_60_days,
+	fin.visits_with_no_appt_in_Q
+from
+	(
+	select
+		pm.appointment_date,
+		pm.district,
+		pm.facility_name,
+		pm.prime_partner,
+		pm.all_appointments,
+		pm.all_recorded_visits,
+        case when (select count(*) from tx_visits tv where date(visit_date) = (pm.appointment_date) and pm.facility_name=facility_name) is null then 0
+        else
+		(case
+			when (
+			select
+				missed_appointments
+			from
+				tx_missed_appointments
+			where
+				recent_appointment = pm.appointment_date
+				and pm.facility_name = facility_name) is null then 0
+			else (
+			select
+				missed_appointments
+			from
+				tx_missed_appointments
+			where
+				recent_appointment = pm.appointment_date
+				and pm.facility_name = facility_name)end)
+		end missed_appointments,
+		case when (select count(*) from tx_visits tv where visit_date = pm.appointment_date and pm.facility_name=facility_name) is null then 0
+		else
+		(pm.all_appointments-
+		(case when (
+		select
+			missed_appointments
+		from
+			tx_missed_appointments
+		where
+			recent_appointment = pm.appointment_date
+			and pm.facility_name = facility_name) is null then 0
+		else (
+		select
+			missed_appointments
+		from
+			tx_missed_appointments
+		where
+			recent_appointment = pm.appointment_date
+			and pm.facility_name = facility_name)
+	end))end  all_visits,
+		case
+			when (pm.all_recorded_visits-(pm.all_appointments-(
+			select
+				missed_appointments
+			from
+				tx_missed_appointments
+			where
+				recent_appointment = pm.appointment_date
+				and pm.facility_name = facility_name))) < 0
+			or (pm.all_recorded_visits-(pm.all_appointments-(
+			select
+				missed_appointments
+			from
+				tx_missed_appointments
+			where
+				recent_appointment = pm.appointment_date
+				and pm.facility_name = facility_name))) is null then 0
+			else (pm.all_recorded_visits-(pm.all_appointments-(
+			select
+				missed_appointments
+			from
+				tx_missed_appointments
+			where
+				recent_appointment = pm.appointment_date
+				and pm.facility_name = facility_name)))
+		end as visits_with_no_appt_in_Q
+	from
+		(
+		select
+			ap.appointment_date,
+			ap.district,
+			ap.facility_name,
+			ap.prime_partner,
+			ap.all_appointments,
+			case
+				when vs.all_recorded_visits is null then 0
+				else vs.all_recorded_visits
+			end all_recorded_visits
+		from
+			((
+			select
+				appointment_date,
+				district,
+				facility_name,
+				prime_partner,
+				count(person_id) as all_appointments
+			from
+				tx_appointments
+			group by
+				appointment_date,
+				district,
+				facility_name,
+				prime_partner) ap
+		left join (
+			select
+				visit_date,
+				district,
+				facility_name,
+				prime_partner,
+				count(person_id) as all_recorded_visits
+			from
+				tx_visits
+			group by
+				visit_date,
+				district,
+				facility_name,
+				prime_partner) vs on
+			vs.visit_date = ap.appointment_date
+			and vs.district = ap.district
+			and vs.facility_name = ap.facility_name
+			and vs.prime_partner = ap.prime_partner)) pm
+	group by
+		pm.appointment_date,
+		pm.district,
+		pm.facility_name,
+		pm.prime_partner,
+		pm.all_appointments,
+		pm.all_recorded_visits,
+		visits_with_no_appt_in_Q) fin
+order by
+	fin.facility_name,
+	fin.appointment_date ;

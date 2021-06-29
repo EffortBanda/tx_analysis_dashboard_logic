@@ -19,4 +19,5 @@ pgloader /home/cdr-user/txcurr_campaign/nft_succesful.load
 echo "sites updated succesfully";
 
 #Load tx_curr tables into pg ids
+psql -U effort ids < /home/cdr-user/txcurr_campaign/tx_overdue_appointments_all_report_dates.sql
 psql -U effort ids < /home/cdr-user/txcurr_campaign/txcurr_pro.sql
