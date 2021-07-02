@@ -246,6 +246,116 @@ where
 
 
 
+
+
+
+drop table if exists tx_visits_without_appointments;
+
+create table tx_visits_without_appointments as
+select
+	distinct bv.district,
+	bv.facility_name,
+	bv.prime_partner,
+	bv.person_id,
+	bv.visit_date,
+	date(bv.appointment_before_visit) appointment_before_visit,
+	av.appointment_after_visit appointment_after_visit
+from
+	(
+	select
+		tv.district,
+		tv.facility_name,
+		tv.prime_partner,
+		tv.person_id,
+		tv.visit_date,
+		case
+			when max(date(before_q.appointment_date)) is null then '1900-12-31'
+			else max(date(before_q.appointment_date))
+		end appointment_before_visit
+	from
+		tx_visits tv
+	left join (
+		select
+			enc.encounter_id,
+			enc.program_id,
+			enc.person_id,
+			enc.visit_date,
+			a.appointment_date
+		from
+			encounters enc
+		join appointments a on
+			enc.encounter_id = a.encounter_id
+		where
+			a.concept_id = '5373'
+			and a.voided = '0'
+			and enc.voided = '0'
+			and enc.program_id = '1'
+		order by
+			enc.visit_date desc ) before_q on
+		(before_q.person_id = tv.person_id
+			and date(before_q.visit_date)<tv.visit_date)
+	where
+		tv.person_id not in (
+		select
+			distinct ta.person_id
+		from
+			tx_appointments ta)
+	group by
+		tv.district,
+		tv.facility_name,
+		tv.prime_partner,
+		tv.person_id,
+		tv.visit_date ) bv
+left join (
+	select
+		tv.district,
+		tv.facility_name,
+		tv.prime_partner,
+		tv.person_id,
+		tv.visit_date,
+		case
+			when after_q.appointment_date is null then '1900-12-31'
+			else date(after_q.appointment_date)
+		end appointment_after_visit
+	from
+		tx_visits tv
+	join (
+		select
+			enc.encounter_id,
+			enc.program_id,
+			enc.person_id,
+			enc.visit_date,
+			a.appointment_date
+		from
+			encounters enc
+		join appointments a on
+			enc.encounter_id = a.encounter_id
+		where
+			a.concept_id = '5373'
+			and a.voided = '0'
+			and enc.voided = '0'
+			and enc.program_id = '1'
+		order by
+			enc.visit_date desc ) after_q on
+		(after_q.person_id = tv.person_id
+			and date(after_q.visit_date)= tv.visit_date)
+	where
+		tv.person_id not in (
+		select
+			distinct ta.person_id
+		from
+			tx_appointments ta) ) av on
+	bv.person_id = av.person_id
+	and bv.visit_date = av.visit_date ;
+
+
+
+
+
+
+
+
+
 drop table if exists tx_missed_appointments;
 create table tx_missed_appointments as
 select distinct 
