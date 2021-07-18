@@ -1,15 +1,60 @@
 delete from tx_overdue_appointments_all_report_dates toaard where toaard.facility_name not in (select site_name from ids.succesful_con_sites); 
-drop table tx_appointments ;
-create table tx_appointments as
+drop table tx_appointments_test ;
+create table tx_appointments_test as
 select
-	DISTINCT loc.district,
+	distinct loc.district,
 	cast(loc.facility_name as CHAR(255)) facility_name,
 	loc.prime_partner,
 	date(a.appointment_date) appointment_date,
 	e.person_id,
+	case
+		when p.gender = '0' then 'F'
+		when p.gender = '1' then 'M'
+		when p.gender is null then 'NA'
+		else 'NA'
+	end gender,
+	case
+		when p.birthdate is null then '0'
+		when p.birthdate is not null then extract (year
+	from
+		(age(date(p.birthdate))))
+		else '0'
+	end patient_age,
+	case
+		when extract (year
+	from
+		(age(date(p.birthdate)))) >= 0
+		and extract (year
+	from
+		(age(date(p.birthdate))))<= 4 then '0_to_4'
+		when extract (year
+	from
+		(age(date(p.birthdate)))) >= 5
+		and extract (year
+	from
+		(age(date(p.birthdate)))) <= 9 then '5_to_9'
+		when extract (year
+	from
+		(age(date(p.birthdate)))) >= 10
+		and extract (year
+	from
+		(age(date(p.birthdate)))) <= 14 then '10_to_14'
+		when extract (year
+	from
+		(age(date(p.birthdate)))) >= 15
+		and extract (year
+	from
+		(age(date(p.birthdate)))) <= 19 then '15_to_19'
+		when extract (year
+	from
+		(age(date(p.birthdate)))) >= 20 then '20_and_above'
+		else 'unknown'
+	end age_bracket,
 	max(date(e.visit_date)) visit_date
 from
 	encounters e
+left join people p on
+	e.person_id = p.person_id
 left join appointments a on
 	e.encounter_id = a.encounter_id
 join (
@@ -30,16 +75,29 @@ where
 	and a.voided = '0'
 	and e.program_id = 1
 	and a.concept_id = 5373
-	and loc.facility_name in (select site_name from ids.succesful_con_sites)
+	and p.voided = '0'
+	and loc.facility_name in (
+	select
+		site_name
+	from
+		ids.succesful_con_sites)
 	and date(appointment_date) between (
-	SELECT
-		CAST(date_trunc('quarter', current_date) as date)) and (select date(CAST(( current_date) as date)::date - cast('1 days' as interval))) 
-  group by 
-  loc.district,
+	select
+		cast(date_trunc('quarter', current_date) as date)) and (
+	select
+		date(cast((current_date) as date)::date - cast('1 days' as interval)))
+group by
+	loc.district,
 	cast(loc.facility_name as CHAR(255)),
 	loc.prime_partner,
 	date(a.appointment_date),
-	e.person_id;
+	e.person_id,
+	p.gender,
+	patient_age,
+	age_bracket ;
+
+select * from tx_appointments ta ;
+select distinct facility_name from tx_appointments ta ;
 
 
 
@@ -53,6 +111,23 @@ select
 	loc.prime_partner,
 	date(e.visit_date) visit_date,
 	e.person_id,
+       case when p.gender='0' then 'F' 
+	     when p.gender ='1' then 'M'
+	     when p.gender is null then 'NA'
+	     else 'NP'
+	     end gender,
+	case when p.birthdate is null then '0'
+	     when p.birthdate is not null then
+	       extract (year from (age(date(p.birthdate))))
+	      else '0'
+	      end patient_age,
+      	 case when extract (year from (age(date(p.birthdate)))) >=0 and extract (year from (age(date(p.birthdate))))<=4 then '0_to_4'
+	       when extract (year from (age(date(p.birthdate)))) >=5 and extract (year from (age(date(p.birthdate)))) <=9 then '5_to_9'
+	       when extract (year from (age(date(p.birthdate)))) >=10 and extract (year from (age(date(p.birthdate)))) <=14 then '10_to_14'
+	       when extract (year from (age(date(p.birthdate)))) >=15 and extract (year from (age(date(p.birthdate)))) <=19 then '15_to_19'
+	       when extract (year from (age(date(p.birthdate)))) >=20 then '20_and_above'
+	       else 'unknown'
+	       end age_bracket,   
 	case
 		when appts.appt_status = '1' then 'had appointment in quarter'
 		else 'had no appointment within quarter'
@@ -60,6 +135,7 @@ select
 	'visit occurred within the quarter' as period_of_visit
 from
 	encounters e
+left join people p on e.person_id=p.person_id
 left join (
 	select
 		distinct appts1.person_id person,
@@ -126,10 +202,28 @@ select
 	loc.prime_partner,
 	date(e.visit_date) visit_date,
 	e.person_id,
+        	case when p.gender='0' then 'F' 
+	     when p.gender ='1' then 'M'
+	     when p.gender is null then 'NA'
+	     else 'NP'
+	     end gender,
+	case when p.birthdate is null then '0'
+	     when p.birthdate is not null then
+	       extract (year from (age(date(p.birthdate))))
+	      else '0'
+	      end patient_age,
+       	  case when extract (year from (age(date(p.birthdate)))) >=0 and extract (year from (age(date(p.birthdate))))<=4 then '0_to_4'
+	       when extract (year from (age(date(p.birthdate)))) >=5 and extract (year from (age(date(p.birthdate)))) <=9 then '5_to_9'
+	       when extract (year from (age(date(p.birthdate)))) >=10 and extract (year from (age(date(p.birthdate)))) <=14 then '10_to_14'
+	       when extract (year from (age(date(p.birthdate)))) >=15 and extract (year from (age(date(p.birthdate)))) <=19 then '15_to_19'
+	       when extract (year from (age(date(p.birthdate)))) >=20 then '20_and_above'
+	       else 'unknown'
+	       end age_bracket,   
 	'had appointment in quarter' as appt_scheduled,
 	'visit before appointment and quarter' as period_of_visit
 from
 	encounters e
+left join people p on e.person_id=p.person_id
 join (
 	select
 		DISTINCT loc.district,
@@ -352,6 +446,11 @@ left join (
 
 
 
+drop table if exists tx_visits_without_appointments_aggregated;
+create table tx_visits_without_appointments_aggregated as
+select tvwa.visit_date, tvwa.district, tvwa.facility_name,tvwa.prime_partner,count(tvwa.facility_name) total_vwa 
+from tx_visits_without_appointments tvwa
+group by tvwa.visit_date, tvwa.district, tvwa.facility_name,tvwa.prime_partner;
 
 
 
@@ -756,4 +855,37 @@ count(facility_name) filter (
 	count(facility_name) filter (
 	where overdue_kpi = 'overdue_Over_60_days') as overdue_Over_60_days
 from  tx_overdue_appointments_all_report_dates
-group by report_date,	district,facility_name,partner; 
+group by report_date,	district,facility_name,partner;
+
+ 
+
+
+drop table if exists tx_raw_aggregate_4;
+create table tx_raw_aggregate_4 as 
+select ta.appointment_date, ta.district, ta.facility_name, ta.prime_partner,
+count(ta.facility_name) filter (where ta.age_bracket='0_to_4') as Ages_0_to_4,
+count(ta.facility_name) filter (where ta.age_bracket='5_to_9') as Ages_5_to_9,
+count(ta.facility_name) filter (where ta.age_bracket='10_to_14') as Ages_10_to_14,
+count(ta.facility_name) filter (where ta.age_bracket='15_to_19') as Ages_15_to_19,
+count(ta.facility_name) filter (where ta.age_bracket='20_and_above') as Ages_20_and_above,
+count(ta.facility_name) filter (where ta.gender='M') as Male,
+count(ta.facility_name) filter (where ta.gender='F') as Female
+from tx_appointments ta 
+group by ta.appointment_date, ta.district, ta.facility_name, ta.prime_partner;
+
+
+drop table if exists tx_raw_aggregate_5;
+create table tx_raw_aggregate_5 as 
+select tv.visit_date ,tv.district,tv.facility_name,tv.prime_partner,
+count(tv.facility_name) filter (where tv.age_bracket='0_to_4') as Ages_0_to_4,
+count(tv.facility_name) filter (where tv.age_bracket='5_to_9') as Ages_5_to_9,
+count(tv.facility_name) filter (where tv.age_bracket='10_to_14') as Ages_10_to_14,
+count(tv.facility_name) filter (where tv.age_bracket='15_to_19') as Ages_15_to_19,
+count(tv.facility_name) filter (where tv.age_bracket='20_and_above') as Ages_20_and_above,
+count(tv.facility_name) filter (where tv.gender='M') as Male,
+count(tv.facility_name) filter (where tv.gender='F') as Female
+from tx_visits tv 
+where tv.person_id in (select distinct ta.person_id from tx_appointments ta)
+group by tv.visit_date ,tv.district,tv.facility_name,tv.prime_partner;
+
+
